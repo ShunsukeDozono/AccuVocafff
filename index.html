@@ -1,0 +1,1591 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>AccuVoca Terminal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+  <style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: #050605;
+    color: #E8F0E8;
+  }
+  body {
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    background-image:
+      radial-gradient(ellipse at 50% 30%, #0F150F 0, #050605 65%);
+  }
+  button { font-family: inherit; }
+  button:active { transform: translateY(1px); }
+  input::placeholder { color: #3A443A; }
+
+  /* Animations */
+  @keyframes glitch {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-3px) skewX(-1deg); }
+    40% { transform: translateX(3px) skewX(1deg); }
+    60% { transform: translateX(-2px); }
+    80% { transform: translateX(2px); }
+  }
+  @keyframes tickerScroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes okIn {
+    0% { transform: scale(0.7); opacity: 0; }
+    60% { transform: scale(1.08); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  .screen-root { animation: fadeSlide .2s ease-out; }
+
+  /* phone */
+  .phone {
+    width: 390px; height: 820px;
+    border-radius: 44px;
+    background: #0A0B0A;
+    box-shadow:
+      0 40px 80px rgba(0,0,0,0.6),
+      0 0 0 10px #161816,
+      0 0 0 12px #24262A,
+      0 0 60px rgba(158,255,0,0.05);
+    overflow: hidden;
+    position: relative;
+  }
+  .phone::before {
+    content: ''; position: absolute;
+    top: 10px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 30px; border-radius: 20px;
+    background: #000; z-index: 100;
+  }
+  /* CRT overlays over the screen only */
+  .crt-overlay {
+    position: absolute; inset: 0;
+    pointer-events: none; z-index: 60;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        rgba(0,0,0,0) 0px,
+        rgba(0,0,0,0) 2px,
+        rgba(0,0,0,0.10) 3px,
+        rgba(0,0,0,0) 4px
+      );
+  }
+  .crt-vignette {
+    position: absolute; inset: 0;
+    pointer-events: none; z-index: 61;
+    background:
+      radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.45) 100%);
+  }
+  .home-indicator {
+    position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+    width: 120px; height: 5px; border-radius: 99px;
+    background: rgba(158, 255, 0, 0.35); z-index: 102;
+  }
+  .screen-scroll {
+    height: 100%; overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .screen-scroll::-webkit-scrollbar { display: none; }
+
+  .caption {
+    text-align: center; margin-top: 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: #5A6A5A; font-weight: 500;
+    letter-spacing: 2px;
+  }
+  .signal-bar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 50;
+    padding: 14px 28px 0;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: #9EFF00;
+    letter-spacing: 1px; pointer-events: none;
+  }
+  </style>
+
+  <!-- CDN fallback detection -->
+  <style>
+    #cdn-error {
+      display: none;
+      position: fixed; top: 20px; left: 20px; right: 20px;
+      background: #2a1215; color: #ff8a80;
+      padding: 14px 18px; border: 1px solid #5c2b2e; border-radius: 8px;
+      font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.5;
+      z-index: 99999;
+    }
+    #cdn-error code { background: #3a1a1f; padding: 2px 5px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="cdn-error">
+    <strong>⚠ CDN 読み込みエラー</strong><br>
+    React / ReactDOM / Babel を unpkg.com から読み込めませんでした。<br>
+    ネットワーク接続、または広告ブロッカー(<code>unpkg.com</code> をブロックしていないか)を確認してください。<br>
+    F12 → Network タブの赤くなっているリクエストで詳細が確認できます。
+  </div>
+
+
+  <div style="display:flex; gap:32px; align-items:center; flex-direction:column">
+    <div class="phone">
+      <div class="signal-bar">
+        <span>9:41</span>
+        <span>REC ● ▌▌▌ ■</span>
+      </div>
+      <div style="position:absolute; top:46px; left:0; right:0; z-index:45;" id="ticker-mount"></div>
+      <div class="screen-scroll" id="root" style="padding-top:68px;"></div>
+      <div class="crt-overlay"></div>
+      <div class="crt-vignette"></div>
+      <div class="home-indicator"></div>
+    </div>
+    <div class="caption">ACCUVOCA · TERMINAL · v1.0.0</div>
+  </div>
+
+  <!-- React + ReactDOM + Babel (CDN) -->
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+  <!-- Screens (components) -->
+  <script type="text/babel" data-presets="react">
+// AccuVoca Terminal — screens module
+// Retro-digital / Bloomberg-style financial terminal aesthetic
+
+const { useState, useEffect, useRef, useMemo } = React;
+
+// ─── design tokens ──────────────────────────────────────────
+const TC = {
+  bg: '#0A0B0A',
+  panel: '#111311',
+  panelHi: '#171A17',
+  line: '#1F231F',
+  lineHi: '#2A2F2A',
+  dim: '#5A6A5A',
+  mid: '#8FA68F',
+  ink: '#E8F0E8',
+  green: '#9EFF00',
+  greenDim: '#5FA800',
+  amber: '#FFB800',
+  amberDim: '#8F6700',
+  red: '#FF3D3D',
+  redDim: '#8F1F1F',
+  blue: '#5FB4FF',
+};
+
+// ─── word bank ──────────────────────────────────────────────
+const WORDS = [
+  { en: 'accrual', ja: '発生主義', cat: 'BASIC' },
+  { en: 'debit', ja: '借方', cat: 'BASIC' },
+  { en: 'credit', ja: '貸方', cat: 'BASIC' },
+  { en: 'asset', ja: '資産', cat: 'BASIC' },
+  { en: 'liability', ja: '負債', cat: 'BASIC' },
+  { en: 'equity', ja: '資本', cat: 'BASIC' },
+  { en: 'revenue', ja: '収益', cat: 'BASIC' },
+  { en: 'expense', ja: '費用', cat: 'BASIC' },
+  { en: 'depreciation', ja: '減価償却', cat: 'BASIC' },
+  { en: 'amortization', ja: '償却', cat: 'BASIC' },
+  { en: 'goodwill', ja: 'のれん', cat: 'BASIC' },
+  { en: 'inventory', ja: '棚卸資産', cat: 'BASIC' },
+  { en: 'receivable', ja: '売掛金', cat: 'BASIC' },
+  { en: 'payable', ja: '買掛金', cat: 'BASIC' },
+  { en: 'impairment', ja: '減損', cat: 'BASIC' },
+  { en: 'audit', ja: '監査', cat: 'AUDIT' },
+  { en: 'assertion', ja: 'アサーション', cat: 'AUDIT' },
+  { en: 'materiality', ja: '重要性', cat: 'AUDIT' },
+  { en: 'disclosure', ja: '開示', cat: 'FS' },
+  { en: 'deferred', ja: '繰延の', cat: 'TAX' },
+];
+
+const pick = (arr, n, exclude = []) => {
+  const pool = arr.filter(x => !exclude.includes(x));
+  const out = [];
+  const copy = [...pool];
+  while (out.length < n && copy.length) {
+    out.push(copy.splice(Math.floor(Math.random() * copy.length), 1)[0]);
+  }
+  return out;
+};
+
+// ─── typewriter hook ────────────────────────────────────────
+function useTypewriter(text, speed = 24) {
+  const [out, setOut] = useState('');
+  useEffect(() => {
+    setOut('');
+    let i = 0;
+    const iv = setInterval(() => {
+      i++;
+      setOut(text.slice(0, i));
+      if (i >= text.length) clearInterval(iv);
+    }, speed);
+    return () => clearInterval(iv);
+  }, [text, speed]);
+  return out;
+}
+
+// ─── ticker (always visible, top) ──────────────────────────
+function Ticker({ items }) {
+  const line = items.map(it => (
+    `${it.sym}  ${it.val}  ${it.chg >= 0 ? '▲' : '▼'}${Math.abs(it.chg).toFixed(2)}%`
+  )).join('     ·     ');
+  const repeated = `${line}     ·     ${line}     ·     ${line}`;
+  return (
+    <div style={{
+      height: 22, borderBottom: `1px solid ${TC.lineHi}`,
+      background: TC.panel, overflow: 'hidden', position: 'relative',
+      display: 'flex', alignItems: 'center',
+    }}>
+      <div style={{
+        position: 'absolute', left: 0, top: 0, bottom: 0,
+        width: 38, background: TC.amber, color: TC.bg,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'JetBrains Mono, monospace', fontSize: 9, fontWeight: 700,
+        letterSpacing: 0.5, zIndex: 2,
+      }}>LIVE</div>
+      <div style={{
+        paddingLeft: 46, whiteSpace: 'nowrap',
+        fontFamily: 'JetBrains Mono, monospace',
+        fontSize: 10, color: TC.mid, letterSpacing: 0.5,
+        animation: 'tickerScroll 45s linear infinite',
+      }}>
+        {repeated.split('·').map((seg, i) => {
+          const hasUp = seg.includes('▲');
+          const hasDown = seg.includes('▼');
+          return (
+            <span key={i} style={{ color: hasUp ? TC.green : hasDown ? TC.red : TC.mid }}>
+              {seg}·
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── shared chrome: status-line at bottom of screens ──────
+function StatusLine({ left, mid, right }) {
+  const [blink, setBlink] = useState(true);
+  useEffect(() => {
+    const iv = setInterval(() => setBlink(b => !b), 550);
+    return () => clearInterval(iv);
+  }, []);
+  return (
+    <div style={{
+      height: 22, borderTop: `1px solid ${TC.lineHi}`,
+      background: TC.panel, display: 'flex', alignItems: 'center',
+      padding: '0 10px', fontFamily: 'JetBrains Mono, monospace',
+      fontSize: 9, color: TC.dim, letterSpacing: 0.5, gap: 10,
+    }}>
+      <span style={{ color: TC.green }}>● {left}</span>
+      <span style={{ flex: 1, textAlign: 'center', color: TC.mid }}>{mid}</span>
+      <span>{right}</span>
+      <span style={{ color: TC.green, opacity: blink ? 1 : 0 }}>▌</span>
+    </div>
+  );
+}
+
+// ─── boot / login ──────────────────────────────────────────
+function BootScreen({ nav, setPlayer }) {
+  const [step, setStep] = useState(0);
+  const [name, setName] = useState('');
+  const [err, setErr] = useState('');
+  const bootLines = [
+    '> ACCUVOCA TERMINAL v1.0.0',
+    '> (c) 2026 · ACCOUNTING VOCAB DIVISION',
+    '> CHECKING SYSTEM ...... OK',
+    '> LOADING WORD BANK .... OK (20 ENTRIES)',
+    '> SESSION READY',
+    '',
+    '> PLEASE IDENTIFY:',
+  ];
+  useEffect(() => {
+    if (step >= bootLines.length) return;
+    const t = setTimeout(() => setStep(step + 1), step === 0 ? 300 : 260);
+    return () => clearTimeout(t);
+  }, [step]);
+
+  const submit = () => {
+    if (!name.trim()) { setErr('NICKNAME REQUIRED'); return; }
+    if (name.length > 12) { setErr('MAX 12 CHARS'); return; }
+    setPlayer({ nickname: name.toUpperCase(), weekCorrect: 0, weekRank: '-', streak: 1 });
+    nav('home');
+  };
+
+  return (
+    <div style={{
+      padding: '16px 14px', minHeight: '100%',
+      display: 'flex', flexDirection: 'column',
+      fontFamily: 'JetBrains Mono, monospace', color: TC.green, fontSize: 12,
+    }}>
+      <div style={{ flex: 1 }}>
+        {bootLines.slice(0, step).map((l, i) => (
+          <div key={i} style={{
+            lineHeight: 1.7,
+            color: l.startsWith('>') ? TC.green : TC.dim,
+          }}>
+            {l || '\u00A0'}
+          </div>
+        ))}
+        {step >= bootLines.length && (
+          <div style={{ marginTop: 14 }}>
+            <div style={{ color: TC.mid, fontSize: 10, marginBottom: 6, letterSpacing: 1 }}>
+              NICKNAME &gt;
+            </div>
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              border: `1px solid ${TC.lineHi}`, background: TC.panel,
+            }}>
+              <span style={{
+                padding: '10px 10px', color: TC.amber, fontSize: 12,
+                borderRight: `1px solid ${TC.lineHi}`,
+              }}>$</span>
+              <input
+                value={name}
+                onChange={e => { setName(e.target.value); setErr(''); }}
+                onKeyDown={e => e.key === 'Enter' && submit()}
+                maxLength={12}
+                autoFocus
+                placeholder="ENTER NAME_"
+                style={{
+                  flex: 1, padding: '10px 10px',
+                  background: 'transparent', border: 'none',
+                  color: TC.ink, fontFamily: 'inherit', fontSize: 12,
+                  letterSpacing: 1, textTransform: 'uppercase',
+                  outline: 'none',
+                }}
+              />
+            </div>
+            {err && (
+              <div style={{ marginTop: 8, color: TC.red, fontSize: 10 }}>
+                [ERR] {err}
+              </div>
+            )}
+            <button onClick={submit} style={{
+              marginTop: 20, width: '100%', padding: '14px',
+              background: TC.green, border: 'none', color: TC.bg,
+              fontFamily: 'inherit', fontSize: 12, fontWeight: 700,
+              letterSpacing: 2, cursor: 'pointer',
+            }}>
+              [ ENTER ] ▶
+            </button>
+            <div style={{
+              marginTop: 18, fontSize: 9, color: TC.dim,
+              lineHeight: 1.7, letterSpacing: 0.5,
+            }}>
+              NO PASSWORD REQUIRED.<br/>
+              NICKNAME IS PUBLIC ON LEADERBOARD.
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 9, color: TC.dim, letterSpacing: 1, marginTop: 12 }}>
+        — END OF BOOT SEQUENCE —
+      </div>
+    </div>
+  );
+}
+
+// ─── home / dashboard ──────────────────────────────────────
+function HomeScreen({ nav, player }) {
+  const now = useMemo(() => {
+    const d = new Date();
+    return d.toTimeString().slice(0, 8);
+  }, []);
+  return (
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* brand bar */}
+      <div style={{
+        padding: '14px 14px 12px',
+        borderBottom: `1px solid ${TC.lineHi}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <div style={brandStyle}>ACCUVOCA</div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            color: TC.amber, letterSpacing: 1.5,
+          }}>TERMINAL</div>
+          <div style={{ flex: 1 }}/>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+            color: TC.dim, letterSpacing: 0.5,
+          }}>{now}</div>
+        </div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: TC.dim, letterSpacing: 1.5, marginTop: 2,
+        }}>// ACCOUNTING VOCABULARY · EN⇄JA</div>
+      </div>
+
+      {/* greeting row */}
+      <div style={{
+        padding: '14px 14px', borderBottom: `1px solid ${TC.line}`,
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <div style={{ flex: 1 }}>
+          <div style={labelStyle}>USER</div>
+          <div style={{ ...numberStyle, fontSize: 20, marginTop: 4 }}>
+            {player?.nickname || '---'}
+          </div>
+        </div>
+        <div style={{ borderLeft: `1px solid ${TC.line}`, paddingLeft: 14 }}>
+          <div style={labelStyle}>STREAK</div>
+          <div style={{ ...numberStyle, fontSize: 20, marginTop: 4, color: TC.amber }}>
+            {String(player?.streak || 0).padStart(2, '0')}
+          </div>
+        </div>
+        <div style={{ borderLeft: `1px solid ${TC.line}`, paddingLeft: 14 }}>
+          <div style={labelStyle}>RANK</div>
+          <div style={{ ...numberStyle, fontSize: 20, marginTop: 4, color: TC.green }}>
+            #{player?.weekRank || '--'}
+          </div>
+        </div>
+      </div>
+
+      {/* KPI grid */}
+      <div style={{
+        padding: '12px 14px', display: 'grid',
+        gridTemplateColumns: '1fr 1fr', gap: 1,
+        background: TC.lineHi,
+      }}>
+        <KPI label="WEEKLY CORRECT" value={player?.weekCorrect || 0} sub="WK17 · 2026"/>
+        <KPI label="TOTAL PLAYS" value={42} sub="ALL TIME"/>
+        <KPI label="ACCURACY" value="78%" sub="LAST 100" tone={TC.green}/>
+        <KPI label="AVG TIME" value="12.4s" sub="PER WORD" mono/>
+      </div>
+
+      {/* mode select */}
+      <div style={{
+        padding: '14px 14px 8px',
+        fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+        color: TC.dim, letterSpacing: 2,
+      }}>&gt; SELECT MODE</div>
+
+      <div style={{ padding: '0 14px' }}>
+        <ModeRow
+          code="A" label="STUDY MODE"
+          desc="4-CHOICE RECALL · NO TIME LIMIT"
+          meta="10 QUESTIONS"
+          tone={TC.green}
+          onClick={() => nav('study')}
+        />
+        <ModeRow
+          code="B" label="COMPETE MODE"
+          desc="SPELL TYPING · TIMED"
+          meta="5 QUESTIONS"
+          tone={TC.amber}
+          onClick={() => nav('compete')}
+        />
+      </div>
+
+      {/* footer nav */}
+      <div style={{ flex: 1 }}/>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1,
+        background: TC.lineHi, marginTop: 14,
+      }}>
+        <FooterBtn onClick={() => nav('ranking')}>
+          <span style={{ color: TC.amber }}>F1</span> · LEADERBOARD
+        </FooterBtn>
+        <FooterBtn onClick={() => nav('mypage')}>
+          <span style={{ color: TC.amber }}>F2</span> · MY ACCOUNT
+        </FooterBtn>
+      </div>
+    </div>
+  );
+}
+
+// ─── study mode ────────────────────────────────────────────
+function StudyScreen({ nav, finish }) {
+  const TOTAL = 10;
+  const [qIdx, setQIdx] = useState(0);
+  const [questions] = useState(() => {
+    const chosen = pick(WORDS, TOTAL);
+    return chosen.map(w => {
+      const wrongs = pick(WORDS.filter(x => x !== w), 3);
+      const direction = Math.random() < 0.5 ? 'en2ja' : 'ja2en';
+      const opts = [w, ...wrongs].sort(() => Math.random() - 0.5);
+      return { word: w, direction, options: opts, correctIdx: opts.indexOf(w) };
+    });
+  });
+  const [selected, setSelected] = useState(null);
+  const [correct, setCorrect] = useState(0);
+  const [fb, setFb] = useState(null); // 'OK' | 'ERR'
+
+  const q = questions[qIdx];
+  const prompt = q.direction === 'en2ja' ? q.word.en : q.word.ja;
+  const isEn = q.direction === 'en2ja';
+  const shown = useTypewriter(prompt, 30);
+
+  const choose = (i) => {
+    if (selected !== null) return;
+    setSelected(i);
+    const ok = i === q.correctIdx;
+    setFb(ok ? 'OK' : 'ERR');
+    if (ok) setCorrect(c => c + 1);
+    setTimeout(() => {
+      setFb(null);
+      if (qIdx + 1 >= TOTAL) {
+        const finalCorrect = ok ? correct + 1 : correct;
+        finish({ mode: 'study', correct: finalCorrect, total: TOTAL, score: finalCorrect * 10, time: 0 });
+      } else {
+        setQIdx(qIdx + 1);
+        setSelected(null);
+      }
+    }, ok ? 700 : 1300);
+  };
+
+  return (
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* header */}
+      <div style={{
+        padding: '12px 14px',
+        borderBottom: `1px solid ${TC.lineHi}`,
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}>
+        <button onClick={() => nav('home')} style={backBtn}>&lt; ESC</button>
+        <div style={{ flex: 1 }}>
+          <div style={labelStyle}>STUDY MODE</div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            color: TC.dim, letterSpacing: 1, marginTop: 2,
+          }}>
+            Q.{String(qIdx + 1).padStart(2, '0')} / {TOTAL}
+          </div>
+        </div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+          color: TC.green, letterSpacing: 1,
+        }}>
+          ✓ {String(correct).padStart(2, '0')}
+        </div>
+      </div>
+
+      {/* progress */}
+      <div style={{ padding: '10px 14px 0' }}>
+        <div style={{ display: 'flex', gap: 2, height: 4 }}>
+          {Array.from({length: TOTAL}).map((_, i) => (
+            <div key={i} style={{
+              flex: 1,
+              background: i < qIdx ? TC.green : i === qIdx ? TC.amber : TC.line,
+            }}/>
+          ))}
+        </div>
+      </div>
+
+      {/* direction tag */}
+      <div style={{ padding: '18px 14px 4px' }}>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: TC.amber, letterSpacing: 2,
+        }}>
+          [ {isEn ? 'EN → JA' : 'JA → EN'} ]
+        </div>
+      </div>
+
+      {/* prompt — with 3D tilt card */}
+      <div style={{ padding: '8px 14px 20px', perspective: 600 }}>
+        <div style={{
+          padding: '28px 18px', background: TC.panelHi,
+          border: `1px solid ${TC.lineHi}`,
+          borderLeft: `3px solid ${TC.green}`,
+          transform: 'rotateX(3deg)',
+          transformOrigin: 'top center',
+          boxShadow: `0 4px 0 ${TC.line}, 0 10px 24px rgba(158,255,0,0.06)`,
+          position: 'relative',
+        }}>
+          <div style={{
+            position: 'absolute', top: 6, right: 8,
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+            color: TC.dim, letterSpacing: 1,
+          }}>
+            {q.word.cat} · {q.word.en.length} CHAR
+          </div>
+          <div style={{
+            fontFamily: isEn ? 'Helvetica Neue, Helvetica, Arial, sans-serif'
+                              : '"Noto Sans JP", sans-serif',
+            fontWeight: 900,
+            fontSize: isEn ? (prompt.length > 9 ? 34 : 44) : 32,
+            color: TC.ink, letterSpacing: isEn ? -1.2 : 0,
+            lineHeight: 1,
+            textTransform: isEn ? 'lowercase' : 'none',
+          }}>
+            {shown}
+            {shown.length < prompt.length && (
+              <span style={{ color: TC.green, marginLeft: 2 }}>▌</span>
+            )}
+          </div>
+          {selected !== null && fb === 'ERR' && (
+            <div style={{
+              marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${TC.line}`,
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 10, color: TC.red,
+              letterSpacing: 1,
+            }}>
+              [ANS] {q.direction === 'en2ja' ? q.word.ja : q.word.en}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* options */}
+      <div style={{ padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {q.options.map((opt, i) => {
+          const isSel = selected === i;
+          const isCorrect = i === q.correctIdx;
+          const showOK = selected !== null && isCorrect;
+          const showBad = isSel && !isCorrect;
+          let bd = TC.line, bg = TC.panel, col = TC.ink, keyCol = TC.amber;
+          if (showOK) { bd = TC.green; bg = 'rgba(158,255,0,0.08)'; keyCol = TC.green; }
+          else if (showBad) { bd = TC.red; bg = 'rgba(255,61,61,0.08)'; col = TC.red; keyCol = TC.red; }
+          else if (selected !== null) { col = TC.dim; keyCol = TC.dim; }
+          const label = q.direction === 'en2ja' ? opt.ja : opt.en;
+          return (
+            <button key={i} onClick={() => choose(i)} disabled={selected !== null} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '12px 12px', textAlign: 'left',
+              background: bg, border: `1px solid ${bd}`,
+              color: col, fontFamily: 'inherit',
+              cursor: selected === null ? 'pointer' : 'default',
+              animation: showBad ? 'glitch .3s' : '',
+              transition: 'border-color .15s, background .15s',
+            }}>
+              <span style={{
+                fontFamily: 'JetBrains Mono, monospace', fontSize: 11,
+                color: keyCol, letterSpacing: 1, minWidth: 18,
+              }}>[{['A','B','C','D'][i]}]</span>
+              <span style={{
+                flex: 1,
+                fontFamily: q.direction === 'en2ja'
+                  ? '"Noto Sans JP", sans-serif'
+                  : 'Helvetica Neue, Helvetica, Arial, sans-serif',
+                fontSize: 15, fontWeight: 600,
+                textTransform: q.direction === 'ja2en' ? 'lowercase' : 'none',
+                letterSpacing: q.direction === 'ja2en' ? -0.3 : 0,
+              }}>
+                {label}
+              </span>
+              {showOK && <span style={{ color: TC.green, fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}>OK</span>}
+              {showBad && <span style={{ color: TC.red, fontFamily: 'JetBrains Mono, monospace', fontSize: 11 }}>ERR</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1 }}/>
+
+      <StatusLine
+        left="READY"
+        mid={fb === 'OK' ? 'CONFIRMED' : fb === 'ERR' ? 'INCORRECT' : 'AWAITING INPUT'}
+        right={`${qIdx+1}/${TOTAL}`}
+      />
+
+      {fb === 'OK' && <OKOverlay/>}
+      {fb === 'ERR' && <ERROverlay/>}
+    </div>
+  );
+}
+
+// ─── compete mode ──────────────────────────────────────────
+function CompeteScreen({ nav, finish }) {
+  const TOTAL = 5;
+  const [qIdx, setQIdx] = useState(0);
+  const [questions] = useState(() => {
+    const eligible = WORDS.filter(w => w.en.length >= 5 && w.en.length <= 12);
+    return pick(eligible, TOTAL);
+  });
+  const [typed, setTyped] = useState([]);
+  const [misses, setMisses] = useState(0);
+  const [totalScore, setTotalScore] = useState(0);
+  const [correctCount, setCorrectCount] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [qStartTime, setQStartTime] = useState(Date.now());
+  const [shake, setShake] = useState(false);
+  const [fx, setFx] = useState(null);
+  const [locked, setLocked] = useState(false);
+
+  const q = questions[qIdx];
+  const target = q.en.toLowerCase();
+  const [candidates, setCandidates] = useState(() => makeCandidates(questions[0].en));
+
+  useEffect(() => {
+    setCandidates(makeCandidates(q.en));
+    setTyped([]); setMisses(0);
+    setQStartTime(Date.now());
+    setLocked(false);
+  }, [qIdx]);
+
+  useEffect(() => {
+    const t = setInterval(() => setElapsed(Date.now() - qStartTime), 50);
+    return () => clearInterval(t);
+  }, [qStartTime]);
+
+  function makeCandidates(word) {
+    const letters = word.toLowerCase().split('');
+    const unique = [...new Set(letters)];
+    const need = 12 - unique.length;
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz'.split('').filter(c => !unique.includes(c));
+    const dummies = pick(alphabet, Math.max(0, need));
+    return [...unique, ...dummies].sort(() => Math.random() - 0.5).map((c, i) => ({ id: i, c }));
+  }
+
+  const tap = (letter) => {
+    if (locked) return;
+    const nextPos = typed.length;
+    if (letter === target[nextPos]) {
+      const newTyped = [...typed, letter];
+      setTyped(newTyped);
+      if (newTyped.length === target.length) {
+        setLocked(true);
+        const secs = (Date.now() - qStartTime) / 1000;
+        const score = Math.max(0, Math.round(100 - secs * 2 - misses * 5));
+        setTotalScore(s => s + score);
+        setCorrectCount(c => c + 1);
+        setFx('OK');
+        setTimeout(() => {
+          setFx(null);
+          if (qIdx + 1 >= TOTAL) {
+            finish({ mode: 'compete', correct: correctCount + 1, total: TOTAL, score: totalScore + score, time: secs });
+          } else {
+            setQIdx(qIdx + 1);
+          }
+        }, 750);
+      }
+    } else {
+      setMisses(m => m + 1);
+      setShake(true);
+      setTimeout(() => setShake(false), 350);
+    }
+  };
+
+  const backspace = () => { if (!locked) setTyped(t => t.slice(0, -1)); };
+
+  return (
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <div style={{
+        padding: '12px 14px',
+        borderBottom: `1px solid ${TC.lineHi}`,
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}>
+        <button onClick={() => nav('home')} style={backBtn}>&lt; ESC</button>
+        <div style={{ flex: 1 }}>
+          <div style={labelStyle}>COMPETE MODE</div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            color: TC.dim, letterSpacing: 1, marginTop: 2,
+          }}>
+            Q.{String(qIdx + 1).padStart(2, '0')} / {TOTAL}
+          </div>
+        </div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 18, fontWeight: 700,
+          color: TC.amber, letterSpacing: 1,
+          fontVariantNumeric: 'tabular-nums',
+        }}>
+          {(elapsed / 1000).toFixed(2)}
+        </div>
+      </div>
+
+      {/* KPI strip */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr 1fr',
+        background: TC.lineHi, gap: 1, borderBottom: `1px solid ${TC.lineHi}`,
+      }}>
+        <MiniKPI label="SCORE" value={totalScore} tone={TC.green}/>
+        <MiniKPI label="MISS" value={misses} tone={misses > 0 ? TC.red : TC.ink}/>
+        <MiniKPI label="DONE" value={`${correctCount}/${TOTAL}`} tone={TC.ink}/>
+      </div>
+
+      {/* question */}
+      <div style={{ padding: '20px 14px 12px', textAlign: 'center' }}>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: TC.amber, letterSpacing: 2, marginBottom: 10,
+        }}>
+          [ TRANSLATE · {target.length} CHAR ]
+        </div>
+        <div style={{
+          fontFamily: '"Noto Sans JP", sans-serif', fontWeight: 900,
+          fontSize: 30, color: TC.ink, letterSpacing: -0.5, lineHeight: 1.15,
+        }}>
+          {q.ja}
+        </div>
+      </div>
+
+      {/* typed slots */}
+      <div style={{
+        padding: '12px 14px',
+        display: 'flex', justifyContent: 'center', gap: 4,
+        animation: shake ? 'glitch .35s' : '',
+      }}>
+        {target.split('').map((_, i) => {
+          const ch = typed[i];
+          const filled = ch !== undefined;
+          const isCursor = i === typed.length && !locked;
+          return (
+            <div key={i} style={{
+              width: 24, height: 36,
+              border: `1px solid ${filled ? TC.green : isCursor ? TC.amber : TC.line}`,
+              background: filled ? 'rgba(158,255,0,0.10)' : TC.panel,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 16, fontWeight: 700,
+              color: filled ? TC.green : TC.ink,
+              textTransform: 'uppercase',
+              boxShadow: isCursor ? `inset 0 -3px 0 ${TC.amber}` : 'none',
+            }}>
+              {ch || (isCursor ? '_' : '')}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1 }}/>
+
+      {/* keypad */}
+      <div style={{ padding: '0 14px 8px' }}>
+        <div style={{
+          display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 4,
+        }}>
+          {candidates.map(c => (
+            <button key={c.id} onClick={() => tap(c.c)} disabled={locked} style={{
+              aspectRatio: '1',
+              background: TC.panel, border: `1px solid ${TC.lineHi}`,
+              color: TC.ink,
+              fontFamily: 'JetBrains Mono, monospace',
+              fontSize: 16, fontWeight: 700, textTransform: 'uppercase',
+              cursor: 'pointer',
+              boxShadow: `0 2px 0 ${TC.line}`,
+            }}>
+              {c.c}
+            </button>
+          ))}
+        </div>
+        <button onClick={backspace} style={{
+          width: '100%', marginTop: 6, padding: '10px',
+          background: TC.panel, border: `1px solid ${TC.lineHi}`,
+          color: TC.amber, fontFamily: 'JetBrains Mono, monospace',
+          fontSize: 10, letterSpacing: 2, fontWeight: 700,
+          cursor: 'pointer',
+        }}>
+          ◀ DELETE
+        </button>
+      </div>
+
+      <StatusLine
+        left="LIVE"
+        mid={fx === 'OK' ? 'SUBMITTED' : shake ? 'INVALID KEY' : 'TYPING ...'}
+        right={`T+${(elapsed/1000).toFixed(1)}s`}
+      />
+
+      {fx === 'OK' && <OKOverlay/>}
+    </div>
+  );
+}
+
+// ─── result ────────────────────────────────────────────────
+function ResultScreen({ nav, result, player }) {
+  const { mode, correct, total, score, time } = result;
+  const pct = Math.floor((correct/total) * 100);
+  const grade = score >= 400 ? 'S' : score >= 250 ? 'A' : score >= 100 ? 'B' : pct >= 80 ? 'A' : pct >= 60 ? 'B' : 'C';
+  const [lines, setLines] = useState(0);
+  useEffect(() => {
+    const iv = setInterval(() => setLines(l => l + 1), 140);
+    return () => clearInterval(iv);
+  }, []);
+
+  const receipt = [
+    ['STATUS', 'COMPLETE'],
+    ['MODE', mode === 'study' ? 'STUDY' : 'COMPETE'],
+    ['CORRECT', `${correct} / ${total}`],
+    ['ACCURACY', `${pct}%`],
+    ['TIME', mode === 'compete' ? `${time.toFixed(1)}s` : '--'],
+    ['SCORE', String(score)],
+  ];
+
+  return (
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        padding: '12px 14px',
+        borderBottom: `1px solid ${TC.lineHi}`,
+      }}>
+        <div style={labelStyle}>SESSION REPORT</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: TC.dim, letterSpacing: 1, marginTop: 2,
+        }}>
+          PRINTED {new Date().toTimeString().slice(0, 8)}
+        </div>
+      </div>
+
+      {/* huge score */}
+      <div style={{ padding: '20px 14px 14px', textAlign: 'center' }}>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: TC.amber, letterSpacing: 3, marginBottom: 6,
+        }}>
+          [ FINAL SCORE ]
+        </div>
+        <div style={{
+          display: 'flex', alignItems: 'baseline', justifyContent: 'center',
+          gap: 14,
+        }}>
+          <div style={{
+            fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+            fontWeight: 900, fontSize: 88, color: TC.green,
+            letterSpacing: -5, lineHeight: 1,
+            fontVariantNumeric: 'tabular-nums',
+            textShadow: `0 0 24px rgba(158,255,0,0.25)`,
+          }}>
+            {String(score).padStart(3, '0')}
+          </div>
+          <div style={{
+            padding: '6px 14px',
+            border: `2px solid ${grade === 'S' ? TC.amber : grade === 'A' ? TC.green : TC.mid}`,
+            color: grade === 'S' ? TC.amber : grade === 'A' ? TC.green : TC.mid,
+            fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+            fontWeight: 900, fontSize: 32, letterSpacing: -1,
+          }}>
+            {grade}
+          </div>
+        </div>
+      </div>
+
+      {/* receipt table */}
+      <div style={{
+        margin: '0 14px', padding: '12px 14px',
+        background: TC.panel, border: `1px solid ${TC.lineHi}`,
+        borderStyle: 'dashed',
+      }}>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: TC.dim, letterSpacing: 1, marginBottom: 8,
+          borderBottom: `1px dashed ${TC.line}`, paddingBottom: 6,
+        }}>
+          ─────── DETAIL ───────
+        </div>
+        {receipt.slice(0, Math.min(lines, receipt.length)).map((r, i) => (
+          <div key={i} style={{
+            display: 'flex', justifyContent: 'space-between',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 11,
+            color: r[0] === 'SCORE' ? TC.green : TC.ink,
+            padding: '3px 0',
+            letterSpacing: 0.5,
+          }}>
+            <span style={{ color: TC.dim }}>{r[0]}</span>
+            <span style={{
+              fontWeight: r[0] === 'SCORE' ? 700 : 400,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {r[1]}
+            </span>
+          </div>
+        ))}
+        <div style={{
+          marginTop: 8, paddingTop: 6,
+          borderTop: `1px dashed ${TC.line}`,
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+          color: TC.dim, letterSpacing: 1, textAlign: 'center',
+        }}>
+          USER: {player?.nickname || '---'} · THANK YOU
+        </div>
+      </div>
+
+      <div style={{ flex: 1 }}/>
+
+      {/* actions */}
+      <div style={{
+        padding: '12px 14px',
+        display: 'flex', flexDirection: 'column', gap: 6,
+      }}>
+        <button onClick={() => nav(mode)} style={{
+          padding: '14px', background: TC.green, color: TC.bg,
+          border: 'none', fontFamily: 'inherit', fontWeight: 700,
+          fontSize: 12, letterSpacing: 2, cursor: 'pointer',
+        }}>
+          [ RETRY ] ▶
+        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => nav('ranking')} style={ghostBtn}>LEADERBOARD</button>
+          <button onClick={() => nav('home')} style={ghostBtn}>HOME</button>
+        </div>
+      </div>
+
+      <StatusLine left="PRINTED" mid="RESULT ARCHIVED" right="OK"/>
+    </div>
+  );
+}
+
+// ─── ranking ───────────────────────────────────────────────
+function RankingScreen({ nav, player }) {
+  const [tab, setTab] = useState('week');
+  const weekly = [
+    { name: 'AKIRA', score: 187 }, { name: 'YUI', score: 164 },
+    { name: 'TARO', score: 152 }, { name: player?.nickname || 'YOU', score: 148, me: true },
+    { name: 'MIKI', score: 140 }, { name: 'SHOTA', score: 128 },
+    { name: 'RINA', score: 115 }, { name: 'DAIKI', score: 102 },
+    { name: 'AYA', score: 98 }, { name: 'KENTO', score: 87 },
+  ];
+  const totalList = [
+    { name: 'YUI', score: 1820 }, { name: 'AKIRA', score: 1654 },
+    { name: 'MIKI', score: 1502 }, { name: 'SHOTA', score: 1340 },
+    { name: 'TARO', score: 1228 }, { name: player?.nickname || 'YOU', score: 1048, me: true },
+    { name: 'RINA', score: 915 }, { name: 'DAIKI', score: 802 },
+    { name: 'AYA', score: 698 }, { name: 'KENTO', score: 587 },
+  ];
+  const data = tab === 'week' ? weekly : totalList;
+
+  return (
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        padding: '12px 14px',
+        borderBottom: `1px solid ${TC.lineHi}`,
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}>
+        <button onClick={() => nav('home')} style={backBtn}>&lt; ESC</button>
+        <div style={{ flex: 1 }}>
+          <div style={labelStyle}>LEADERBOARD</div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            color: TC.dim, letterSpacing: 1, marginTop: 2,
+          }}>TOP 10 · SORTED BY SCORE</div>
+        </div>
+      </div>
+
+      {/* tabs */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        borderBottom: `1px solid ${TC.lineHi}`,
+      }}>
+        {[['week','THIS WEEK'], ['total','ALL TIME']].map(([v, l]) => (
+          <button key={v} onClick={() => setTab(v)} style={{
+            padding: '12px 0',
+            background: tab === v ? TC.panelHi : 'transparent',
+            border: 'none',
+            borderBottom: tab === v ? `2px solid ${TC.green}` : `2px solid transparent`,
+            color: tab === v ? TC.green : TC.dim,
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: 10, letterSpacing: 2, fontWeight: 700,
+            cursor: 'pointer',
+          }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* column header */}
+      <div style={{
+        padding: '8px 14px',
+        display: 'grid', gridTemplateColumns: '28px 1fr 90px',
+        fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+        color: TC.dim, letterSpacing: 2,
+        borderBottom: `1px solid ${TC.line}`,
+      }}>
+        <span>RK</span>
+        <span>USER</span>
+        <span style={{ textAlign: 'right' }}>SCORE ▼</span>
+      </div>
+
+      {/* rows */}
+      <div style={{ padding: '4px 0' }}>
+        {data.map((entry, i) => {
+          const rank = i + 1;
+          const me = entry.me;
+          const rankCol = rank === 1 ? TC.amber : rank === 2 ? TC.green : rank === 3 ? TC.blue : TC.dim;
+          return (
+            <div key={rank} style={{
+              padding: '10px 14px',
+              display: 'grid', gridTemplateColumns: '28px 1fr 90px',
+              background: me ? 'rgba(158,255,0,0.07)' : 'transparent',
+              borderLeft: me ? `2px solid ${TC.green}` : '2px solid transparent',
+              borderBottom: `1px solid ${TC.line}`,
+              alignItems: 'center',
+            }}>
+              <span style={{
+                fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+                fontWeight: 900, fontSize: 16, color: rankCol,
+                letterSpacing: -0.5,
+              }}>
+                {String(rank).padStart(2, '0')}
+              </span>
+              <span style={{
+                fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+                fontWeight: 700, fontSize: 14, color: TC.ink,
+                letterSpacing: -0.2,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                {entry.name}
+                {me && (
+                  <span style={{
+                    background: TC.green, color: TC.bg,
+                    fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+                    padding: '1px 5px', letterSpacing: 1, fontWeight: 700,
+                  }}>YOU</span>
+                )}
+              </span>
+              <span style={{
+                textAlign: 'right',
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 14, fontWeight: 700, color: TC.ink,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {entry.score.toLocaleString()}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ flex: 1 }}/>
+      <StatusLine left="SYNCED" mid={`${data.length} ROWS`} right="OK"/>
+    </div>
+  );
+}
+
+// ─── mypage ────────────────────────────────────────────────
+function MyPageScreen({ nav, player }) {
+  if (!player) {
+    return (
+      <div style={{ padding: 14, color: TC.ink, fontFamily: 'inherit' }}>
+        <button onClick={() => nav('home')} style={backBtn}>&lt; ESC</button>
+        <div style={{ marginTop: 40, textAlign: 'center' }}>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', color: TC.red,
+            fontSize: 11, letterSpacing: 2,
+          }}>
+            [ERR] NO SESSION
+          </div>
+          <button onClick={() => nav('register')} style={{
+            marginTop: 18, padding: '12px 20px',
+            background: TC.green, color: TC.bg, border: 'none',
+            fontFamily: 'inherit', fontWeight: 700, fontSize: 11,
+            letterSpacing: 2, cursor: 'pointer',
+          }}>
+            [ REGISTER ]
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const history = [
+    { mode: 'study', score: 80, correct: 8, total: 10, at: 'TODAY 14:20' },
+    { mode: 'compete', score: 342, correct: 4, total: 5, at: 'TODAY 11:05' },
+    { mode: 'study', score: 100, correct: 10, total: 10, at: 'YSTRDY 19:44' },
+    { mode: 'compete', score: 258, correct: 3, total: 5, at: 'YSTRDY 08:12' },
+    { mode: 'study', score: 70, correct: 7, total: 10, at: '2D AGO' },
+  ];
+  const weekData = [6, 9, 4, 8, 10, 7, 5];
+
+  return (
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        padding: '12px 14px',
+        borderBottom: `1px solid ${TC.lineHi}`,
+        display: 'flex', alignItems: 'center', gap: 10,
+      }}>
+        <button onClick={() => nav('home')} style={backBtn}>&lt; ESC</button>
+        <div style={{ flex: 1 }}>
+          <div style={labelStyle}>ACCOUNT STATEMENT</div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            color: TC.dim, letterSpacing: 1, marginTop: 2,
+          }}>AS OF 25 APR 2026</div>
+        </div>
+      </div>
+
+      {/* header card */}
+      <div style={{
+        padding: '16px 14px',
+        borderBottom: `1px solid ${TC.line}`,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <div style={{
+            fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+            fontWeight: 900, fontSize: 36, color: TC.ink,
+            letterSpacing: -1.5, lineHeight: 1,
+          }}>
+            {player.nickname}
+          </div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            color: TC.amber, letterSpacing: 1,
+          }}>
+            · ACC#1048
+          </div>
+        </div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: TC.dim, letterSpacing: 1, marginTop: 4,
+        }}>
+          REGISTERED 2026-04-24 · ACTIVE
+        </div>
+      </div>
+
+      {/* stats grid */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1,
+        background: TC.lineHi, borderBottom: `1px solid ${TC.lineHi}`,
+      }}>
+        <KPI label="TOTAL PLAYS" value="42" sub="SESSIONS"/>
+        <KPI label="TOTAL CORRECT" value="284" sub="ANSWERS"/>
+        <KPI label="ACCURACY" value="78%" sub="CUMULATIVE" tone={TC.green}/>
+        <KPI label="BEST SCORE" value="487" sub="COMPETE" tone={TC.amber}/>
+      </div>
+
+      {/* streak chart */}
+      <div style={{ padding: '14px 14px 10px' }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          marginBottom: 10,
+        }}>
+          <div style={labelStyle}>WEEKLY ACTIVITY</div>
+          <div style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+            color: TC.amber, letterSpacing: 1,
+          }}>
+            STREAK: 07D
+          </div>
+        </div>
+        <div style={{
+          display: 'flex', alignItems: 'flex-end', gap: 5,
+          height: 70, paddingBottom: 16, borderBottom: `1px solid ${TC.line}`,
+        }}>
+          {weekData.map((v, i) => (
+            <div key={i} style={{ flex: 1, position: 'relative', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <div style={{
+                height: `${(v / 10) * 100}%`,
+                background: v >= 8 ? TC.green : v >= 5 ? TC.amber : TC.redDim,
+                boxShadow: `0 2px 0 ${TC.line}`,
+              }}/>
+              <div style={{
+                position: 'absolute', bottom: -14, left: 0, right: 0,
+                textAlign: 'center',
+                fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+                color: TC.dim, letterSpacing: 0.5,
+              }}>
+                {['M','T','W','T','F','S','S'][i]}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* history ledger */}
+      <div style={{ padding: '10px 14px 0' }}>
+        <div style={labelStyle}>TRANSACTION LOG</div>
+      </div>
+      <div style={{
+        margin: '8px 14px 14px',
+        border: `1px solid ${TC.line}`,
+      }}>
+        <div style={{
+          padding: '6px 10px',
+          display: 'grid', gridTemplateColumns: '20px 52px 1fr 50px',
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+          color: TC.dim, letterSpacing: 2,
+          background: TC.panel,
+          borderBottom: `1px solid ${TC.line}`,
+        }}>
+          <span></span>
+          <span>MODE</span>
+          <span>TIMESTAMP</span>
+          <span style={{ textAlign: 'right' }}>PTS</span>
+        </div>
+        {history.map((h, i) => (
+          <div key={i} style={{
+            padding: '8px 10px',
+            display: 'grid', gridTemplateColumns: '20px 52px 1fr 50px',
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+            color: TC.ink, alignItems: 'center',
+            borderBottom: i < history.length - 1 ? `1px solid ${TC.line}` : 'none',
+          }}>
+            <span style={{
+              color: h.mode === 'study' ? TC.green : TC.amber,
+              fontWeight: 700,
+            }}>
+              {h.mode === 'study' ? 'A' : 'B'}
+            </span>
+            <span style={{ color: TC.mid, fontSize: 9 }}>
+              {h.correct}/{h.total}
+            </span>
+            <span style={{ color: TC.dim, fontSize: 9 }}>
+              {h.at}
+            </span>
+            <span style={{
+              textAlign: 'right', fontWeight: 700, color: TC.ink,
+              fontVariantNumeric: 'tabular-nums',
+            }}>
+              {String(h.score).padStart(3, '0')}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ flex: 1 }}/>
+      <StatusLine left="SYNCED" mid={`${history.length} ENTRIES`} right="OK"/>
+    </div>
+  );
+}
+
+// ─── shared atoms ──────────────────────────────────────────
+function KPI({ label, value, sub, tone, mono }) {
+  return (
+    <div style={{ padding: '10px 12px', background: TC.bg }}>
+      <div style={labelStyle}>{label}</div>
+      <div style={{
+        fontFamily: mono ? 'JetBrains Mono, monospace' : 'Helvetica Neue, Helvetica, Arial, sans-serif',
+        fontWeight: mono ? 700 : 900,
+        fontSize: 22, color: tone || TC.ink, letterSpacing: -0.5,
+        marginTop: 3, lineHeight: 1,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {value}
+      </div>
+      <div style={{
+        fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+        color: TC.dim, letterSpacing: 1, marginTop: 4,
+      }}>
+        {sub}
+      </div>
+    </div>
+  );
+}
+
+function MiniKPI({ label, value, tone }) {
+  return (
+    <div style={{ padding: '8px 10px', background: TC.bg, textAlign: 'center' }}>
+      <div style={{
+        fontFamily: 'JetBrains Mono, monospace', fontSize: 8,
+        color: TC.dim, letterSpacing: 1.5,
+      }}>{label}</div>
+      <div style={{
+        fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+        fontWeight: 900, fontSize: 22, color: tone || TC.ink,
+        letterSpacing: -0.5, marginTop: 2,
+        fontVariantNumeric: 'tabular-nums',
+      }}>{value}</div>
+    </div>
+  );
+}
+
+function ModeRow({ code, label, desc, meta, tone, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      width: '100%', display: 'flex', alignItems: 'stretch',
+      border: `1px solid ${TC.lineHi}`, background: TC.panel,
+      padding: 0, marginBottom: 8, cursor: 'pointer',
+      fontFamily: 'inherit', color: TC.ink, textAlign: 'left',
+      boxShadow: `2px 2px 0 ${TC.line}`,
+      transition: 'transform .1s, box-shadow .1s',
+    }}>
+      <div style={{
+        padding: '14px 10px',
+        background: tone, color: TC.bg,
+        fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+        fontWeight: 900, fontSize: 24, letterSpacing: -1,
+        minWidth: 42, textAlign: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>{code}</div>
+      <div style={{ flex: 1, padding: '10px 12px' }}>
+        <div style={{
+          fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+          fontWeight: 900, fontSize: 15, letterSpacing: -0.5,
+        }}>{label}</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: TC.dim, letterSpacing: 1, marginTop: 3,
+        }}>{desc}</div>
+        <div style={{
+          fontFamily: 'JetBrains Mono, monospace', fontSize: 9,
+          color: tone, letterSpacing: 1, marginTop: 3,
+        }}>· {meta}</div>
+      </div>
+      <div style={{
+        padding: '14px 12px',
+        display: 'flex', alignItems: 'center',
+        color: tone, fontSize: 18,
+      }}>▶</div>
+    </button>
+  );
+}
+
+function FooterBtn({ children, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      background: TC.panel, border: 'none',
+      padding: '14px 10px',
+      fontFamily: 'JetBrains Mono, monospace',
+      fontSize: 10, color: TC.ink, letterSpacing: 1.5, fontWeight: 700,
+      cursor: 'pointer', textAlign: 'center',
+    }}>
+      {children}
+    </button>
+  );
+}
+
+function OKOverlay() {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 40,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        padding: '14px 28px',
+        background: TC.bg,
+        border: `2px solid ${TC.green}`,
+        color: TC.green,
+        fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+        fontWeight: 900, fontSize: 36, letterSpacing: 4,
+        boxShadow: `0 0 40px rgba(158,255,0,0.35), inset 0 0 20px rgba(158,255,0,0.1)`,
+        animation: 'okIn .5s cubic-bezier(.2,.8,.3,1)',
+      }}>
+        · OK ·
+      </div>
+    </div>
+  );
+}
+
+function ERROverlay() {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 40,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div style={{
+        padding: '10px 24px',
+        background: TC.bg,
+        border: `2px solid ${TC.red}`,
+        color: TC.red,
+        fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+        fontWeight: 900, fontSize: 28, letterSpacing: 4,
+        boxShadow: `0 0 30px rgba(255,61,61,0.35)`,
+        animation: 'glitch .4s',
+      }}>
+        · ERR ·
+      </div>
+    </div>
+  );
+}
+
+// ─── shared styles ────────────────────────────────────────
+const labelStyle = {
+  fontFamily: 'JetBrains Mono, monospace',
+  fontSize: 9, color: TC.dim, letterSpacing: 2, fontWeight: 700,
+};
+const numberStyle = {
+  fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+  fontWeight: 900, color: TC.ink, letterSpacing: -0.5,
+  lineHeight: 1, fontVariantNumeric: 'tabular-nums',
+};
+const brandStyle = {
+  fontFamily: 'Helvetica Neue, Helvetica, Arial, sans-serif',
+  fontWeight: 900, fontSize: 20, color: TC.ink,
+  letterSpacing: -1.2, lineHeight: 1,
+};
+const backBtn = {
+  padding: '4px 8px',
+  background: 'transparent', border: `1px solid ${TC.lineHi}`,
+  color: TC.amber, fontFamily: 'JetBrains Mono, monospace',
+  fontSize: 10, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer',
+};
+const ghostBtn = {
+  flex: 1, padding: '11px',
+  background: 'transparent', border: `1px solid ${TC.lineHi}`,
+  color: TC.ink, fontFamily: 'JetBrains Mono, monospace',
+  fontSize: 10, letterSpacing: 1.5, fontWeight: 700, cursor: 'pointer',
+};
+
+Object.assign(window, {
+  BootScreen, HomeScreen, StudyScreen, CompeteScreen,
+  ResultScreen, RankingScreen, MyPageScreen, Ticker,
+});
+
+  </script>
+
+  <!-- App entry -->
+  <script type="text/babel" data-presets="react">
+    const TICKER_ITEMS = [
+      { sym: 'ACCRUAL', val: '発生主義', chg: 1.24 },
+      { sym: 'DEBIT', val: '借方', chg: -0.44 },
+      { sym: 'EQUITY', val: '資本', chg: 2.10 },
+      { sym: 'GOODWILL', val: 'のれん', chg: -1.08 },
+      { sym: 'AUDIT', val: '監査', chg: 0.62 },
+      { sym: 'DEFERRED', val: '繰延', chg: -0.30 },
+      { sym: 'IMPAIRMENT', val: '減損', chg: 0.88 },
+      { sym: 'ASSET', val: '資産', chg: 1.02 },
+      { sym: 'REVENUE', val: '収益', chg: -0.14 },
+      { sym: 'PAYABLE', val: '買掛金', chg: 0.44 },
+    ];
+
+    function App() {
+      const [screen, setScreen] = useState('boot');
+      const [player, setPlayer] = useState(null);
+      const [result, setResult] = useState(null);
+
+      const nav = (to) => {
+        if ((to === 'study' || to === 'compete' || to === 'mypage') && !player) {
+          setScreen('boot'); return;
+        }
+        if (to === 'register') { setScreen('boot'); return; }
+        setScreen(to);
+      };
+      const setPlayerAndGo = (p) => {
+        setPlayer({ ...p, weekCorrect: 0, weekRank: 4 });
+      };
+      const finish = (r) => {
+        setResult(r);
+        if (player) {
+          setPlayer(p => ({
+            ...p,
+            weekCorrect: (p.weekCorrect || 0) + r.correct,
+            weekRank: 4,
+          }));
+        }
+        setScreen('result');
+      };
+
+      return (
+        <>
+          <div className="screen-root" key={screen} style={{ minHeight: '100%' }}>
+            {screen === 'boot' && <BootScreen nav={nav} setPlayer={setPlayerAndGo}/>}
+            {screen === 'home' && <HomeScreen nav={nav} player={player}/>}
+            {screen === 'study' && <StudyScreen nav={nav} finish={finish}/>}
+            {screen === 'compete' && <CompeteScreen nav={nav} finish={finish}/>}
+            {screen === 'result' && <ResultScreen nav={nav} result={result} player={player}/>}
+            {screen === 'ranking' && <RankingScreen nav={nav} player={player}/>}
+            {screen === 'mypage' && <MyPageScreen nav={nav} player={player}/>}
+          </div>
+        </>
+      );
+    }
+
+    function TickerMount() {
+      return <Ticker items={TICKER_ITEMS}/>;
+    }
+
+    ReactDOM.createRoot(document.getElementById('ticker-mount')).render(<TickerMount/>);
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+
+  <script>
+    // CDN読み込み失敗検出
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        if (typeof React === 'undefined' || typeof ReactDOM === 'undefined' || typeof Babel === 'undefined') {
+          var e = document.getElementById('cdn-error');
+          if (e) e.style.display = 'block';
+        }
+      }, 2000);
+    });
+  </script>
+</body>
+</html>
